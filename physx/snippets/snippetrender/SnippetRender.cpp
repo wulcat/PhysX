@@ -461,7 +461,7 @@ static void defaultMouseCallback(int button, int state, int x, int y)
 static void defaultKeyboardCallback(unsigned char key, int x, int y)
 {
 	if(key==27)
-		glutLeaveMainLoop();
+		exit(0);
 
 	if (key == 110) //n
 		gWireFrame = !gWireFrame;
@@ -673,7 +673,7 @@ void setupDefault(const char* name, Camera* camera, KeyboardCallback kbcb, Rende
 	setupDefaultRenderState();
 	enableVSync(true);
 
-	glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+//	glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 
 
 	gUserExitCB = excb;

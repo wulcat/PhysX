@@ -100,7 +100,7 @@ ELSE()
 	SET(AARCH64_FLAGS "")
 ENDIF()
 
-IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
 	# using Clang
 	IF ("${CMAKE_CXX_COMPILER_VERSION}" VERSION_LESS "10.0.0")
 		SET(PHYSX_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fno-rtti -fno-exceptions -ffunction-sections -fdata-sections -fstrict-aliasing -fvisibility=hidden ${AARCH64_FLAGS} ${CLANG_WARNINGS}" CACHE INTERNAL "PhysX CXX")
