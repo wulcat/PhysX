@@ -115,6 +115,8 @@ class CMakePreset:
             return False
         elif self.compiler == 'x86_64-w64-mingw32-g++':
             return False
+        elif self.targetPlatform == 'emscripten':
+            return False
         return True
 
     def getCMakeSwitches(self):
@@ -220,6 +222,11 @@ class CMakePreset:
         elif self.targetPlatform == 'mac64':
             outString = outString + ' -DTARGET_BUILD_PLATFORM=mac'
             outString = outString + ' -DPX_OUTPUT_ARCH=x86'
+            return outString
+        elif self.targetPlatform == 'emscripten':
+            outString = outString + ' -DTARGET_BUILD_PLATFORM=emscripten'
+            outString = outString + ' -DCMAKE_TOOLCHAIN_FILE=\"' + \
+                os.path.join(os.environ['EMSDK'] + '/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake\"')
             return outString
         return ''
 
