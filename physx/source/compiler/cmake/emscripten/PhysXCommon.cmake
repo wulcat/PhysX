@@ -31,6 +31,8 @@
 SET(PXCOMMON_PLATFORM_SRC_FILES 
 )
 
+message("Hello world")
+message("${PHYSX_SOURCE_DIR}")
 SET(PXCOMMON_PLATFORM_INCLUDES
 	${PHYSX_SOURCE_DIR}/common/src/linux
 )

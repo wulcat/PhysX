@@ -29,7 +29,7 @@
 #
 
 SET(SCENEQUERY_PLATFORM_INCLUDES
-	PRIVATE ${PHYSX_SOURCE_DIR}/Common/src/linux
+	PRIVATE ${PHYSX_SOURCE_DIR}/common/src/linux
 )
 
 
