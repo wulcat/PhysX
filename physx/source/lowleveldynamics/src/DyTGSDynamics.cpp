@@ -69,6 +69,7 @@
 #include "DyTGS.h"
 #include "DyResidualAccumulator.h"
 #include "DyThreadContext.h"
+#include "DyIslandManager.h"
 
 #define PX_USE_BLOCK_SOLVER 1
 #define PX_USE_BLOCK_1D 1
@@ -134,7 +135,7 @@ namespace Dy
 
 Context* createTGSDynamicsContext(	PxcNpMemBlockPool* memBlockPool, PxcScratchAllocator& scratchAllocator, Cm::FlushPool& taskPool,
 									PxvSimStats& simStats, PxTaskManager* taskManager, PxVirtualAllocatorCallback* allocatorCallback,
-									PxsMaterialManager* materialManager, IG::SimpleIslandManager* islandManager, PxU64 contextID,
+									PxsMaterialManager* materialManager, IG::SimpleIslandManager& islandManager, PxU64 contextID,
 									bool enableStabilization, bool useEnhancedDeterminism,
 									PxReal lengthScale, bool externalForcesEveryTgsIterationEnabled, bool isResidualReportingEnabled)
 {
@@ -296,7 +297,7 @@ DynamicsTGSContext::DynamicsTGSContext(	PxcNpMemBlockPool* memBlockPool,
 										PxTaskManager* taskManager,
 										PxVirtualAllocatorCallback* allocatorCallback,
 										PxsMaterialManager* materialManager,
-										IG::SimpleIslandManager* islandManager,
+										IG::SimpleIslandManager& islandManager,
 										PxU64 contextID,
 										bool enableStabilization,
 										bool useEnhancedDeterminism,
@@ -353,7 +354,7 @@ void DynamicsTGSContext::setDescFromIndices(PxSolverConstraintDesc& desc, const 
 	{
 		const PxNodeIndex& nodeIndex0 = reinterpret_cast<const PxNodeIndex&>(constraint.articulation0);
 		const IG::Node& node0 = islandSim.getNode(nodeIndex0);
-		desc.articulationA = node0.getArticulation();
+		desc.articulationA = node0.mObject;
 		desc.linkIndexA = nodeIndex0.articulationLinkId();
 		desc.bodyADataIndex = 0;
 	}
@@ -372,7 +373,7 @@ void DynamicsTGSContext::setDescFromIndices(PxSolverConstraintDesc& desc, const 
 	{
 		const PxNodeIndex& nodeIndex1 = reinterpret_cast<const PxNodeIndex&>(constraint.articulation1);
 		const IG::Node& node1 = islandSim.getNode(nodeIndex1);
-		desc.articulationB = node1.getArticulation();
+		desc.articulationB = node1.mObject;
 		desc.linkIndexB = nodeIndex1.articulationLinkId();// PxTo8(getLinkIndex(constraint.articulation1));
 		desc.bodyBDataIndex = 0;
 	}
@@ -396,7 +397,7 @@ void DynamicsTGSContext::setDescFromIndices(PxSolverConstraintDesc& desc, IG::Ed
 
 	const IG::IslandSim& islandSim = islandManager.getAccurateIslandSim();
 
-	PxNodeIndex node1 = islandSim.getNodeIndex1(edgeIndex);
+	const PxNodeIndex node1 = islandSim.mCpuData.getNodeIndex1(edgeIndex);
 	if (node1.isStaticBody())
 	{
 		desc.tgsBodyA = &mWorldSolverBodyVel;
@@ -411,36 +412,24 @@ void DynamicsTGSContext::setDescFromIndices(PxSolverConstraintDesc& desc, IG::Ed
 		{
 			PX_ASSERT(node1.isArticulation());
 		
-			Dy::FeatherstoneArticulation* a = islandSim.getLLArticulation(node1);
-			PxU8 type;
+			Dy::FeatherstoneArticulation* a = getArticulationFromIG(islandSim, node1);
 
-			a->fillIndexType(node1.articulationLinkId(),type);
-
-			if (type == PxsIndexedInteraction::eARTICULATION)
-			{
-				desc.articulationA = a;
-				desc.linkIndexA = node1.articulationLinkId();
-			}
-			else
-			{
-				desc.tgsBodyA = &mWorldSolverBodyVel;
-				desc.linkIndexA = PxSolverConstraintDesc::RIGID_BODY;
-			}
-			
+			desc.articulationA = a;
+			desc.linkIndexA = node1.articulationLinkId();
 			desc.bodyADataIndex = 0;
 		}
 		else
 		{
 			PX_ASSERT(!node1.isArticulation());
-			PxU32 activeIndex = islandSim.getActiveNodeIndex(node1);
-			PxU32 index = node.isKinematic() ? activeIndex : bodyRemap[activeIndex] + solverBodyOffset;
+			const PxU32 activeIndex = islandSim.getActiveNodeIndex(node1);
+			const PxU32 index = node.isKinematic() ? activeIndex : bodyRemap[activeIndex] + solverBodyOffset;
 			desc.tgsBodyA = &solverBodies[index + 1];
 			desc.bodyADataIndex = index + 1;
 			desc.linkIndexA = PxSolverConstraintDesc::RIGID_BODY;
 		}
 	}
 
-	PxNodeIndex node2 = islandSim.getNodeIndex2(edgeIndex);
+	const PxNodeIndex node2 = islandSim.mCpuData.getNodeIndex2(edgeIndex);
 	if (node2.isStaticBody())
 	{
 		desc.tgsBodyB = &mWorldSolverBodyVel;
@@ -453,30 +442,17 @@ void DynamicsTGSContext::setDescFromIndices(PxSolverConstraintDesc& desc, IG::Ed
 		if (node.getNodeType() == IG::Node::eARTICULATION_TYPE)
 		{
 			PX_ASSERT(node2.isArticulation());
-			Dy::FeatherstoneArticulation* b = islandSim.getLLArticulation(node2);
+			Dy::FeatherstoneArticulation* b = getArticulationFromIG(islandSim, node2);
 
-			PxU8 type;
-
-			b->fillIndexType(node2.articulationLinkId(), type);
-
-			if (type == PxsIndexedInteraction::eARTICULATION)
-			{
-				desc.articulationB = b;
-				desc.linkIndexB = node2.articulationLinkId();
-			}
-			else
-			{
-				desc.tgsBodyB = &mWorldSolverBodyVel;
-				desc.linkIndexB = PxSolverConstraintDesc::RIGID_BODY;
-			}
-
+			desc.articulationB = b;
+			desc.linkIndexB = node2.articulationLinkId();
 			desc.bodyBDataIndex = 0;
 		}
 		else
 		{
 			PX_ASSERT(!node2.isArticulation());
-			PxU32 activeIndex = islandSim.getActiveNodeIndex(node2);
-			PxU32 index = node.isKinematic() ? activeIndex : bodyRemap[activeIndex] + solverBodyOffset;
+			const PxU32 activeIndex = islandSim.getActiveNodeIndex(node2);
+			const PxU32 index = node.isKinematic() ? activeIndex : bodyRemap[activeIndex] + solverBodyOffset;
 			desc.tgsBodyB = &solverBodies[index + 1];
 			desc.bodyBDataIndex = index + 1;
 			desc.linkIndexB = PxSolverConstraintDesc::RIGID_BODY;
@@ -539,7 +515,7 @@ public:
 	{
 		for (PxU32 i = 0; i<mNbKinematics; i++)
 		{
-			PxsRigidBody* rigidBody = mIslandSim.getRigidBody(mKinematicIndices[i]);
+			PxsRigidBody* rigidBody = getRigidBodyFromIG(mIslandSim, mKinematicIndices[i]);
 			const PxsBodyCore& core = rigidBody->getCore();
 			copyToSolverBodyDataStepKinematic(core.linearVelocity, core.angularVelocity, core.body2World, core.maxPenBias,
 				core.maxContactImpulse, mKinematicIndices[i].index(), core.contactReportThreshold, core.maxAngularVelocitySq,
@@ -579,14 +555,12 @@ public:
 };
 }
 
-void DynamicsTGSContext::update(IG::SimpleIslandManager& simpleIslandManager, PxBaseTask* continuation, PxBaseTask* lostTouchTask,
+void DynamicsTGSContext::update(PxBaseTask* continuation, PxBaseTask* lostTouchTask,
 	PxvNphaseImplementationContext* nphase, 
 	PxU32 /*maxPatchesPerCM*/, PxU32 maxArticulationLinks,
 	PxReal dt, const PxVec3& gravity, PxBitMapPinned& /*changedHandleMap*/)
 {
 	PX_PROFILE_ZONE("Dynamics.solverQueueTasks", mContextID);
-
-	PX_UNUSED(simpleIslandManager);
 
 	mOutputIterator = nphase->getContactManagerOutputs();
 
@@ -595,7 +569,7 @@ void DynamicsTGSContext::update(IG::SimpleIslandManager& simpleIslandManager, Px
 	mInvDt = 1.0f / dt;
 	mGravity = gravity;
 
-	const IG::IslandSim& islandSim = simpleIslandManager.getAccurateIslandSim();
+	const IG::IslandSim& islandSim = mIslandManager.getAccurateIslandSim();
 
 	const PxU32 islandCount = islandSim.getNbActiveIslands();
 
@@ -604,7 +578,7 @@ void DynamicsTGSContext::update(IG::SimpleIslandManager& simpleIslandManager, Px
 
 	for (PxU32 a = 0; a < activatedContactCount; ++a)
 	{
-		PxsContactManager* cm = simpleIslandManager.getContactManager(activatingEdges[a]);
+		PxsContactManager* cm = mIslandManager.getContactManager(activatingEdges[a]);
 		if (cm)
 			cm->getWorkUnit().mFrictionPatchCount = 0; //KS - zero the friction patch count on any activating edges
 	}
@@ -638,7 +612,7 @@ void DynamicsTGSContext::update(IG::SimpleIslandManager& simpleIslandManager, Px
 	lostTouchTask->addReference();
 
 	UpdateContinuationTGSTask* task = PX_PLACEMENT_NEW(mTaskPool.allocate(sizeof(UpdateContinuationTGSTask)), UpdateContinuationTGSTask)
-		(*this, simpleIslandManager, lostTouchTask, mContextID, maxArticulationLinks);
+		(*this, mIslandManager, lostTouchTask, mContextID, maxArticulationLinks);
 
 	task->setContinuation(continuation);
 
@@ -781,23 +755,22 @@ void DynamicsTGSContext::updatePostKinematic(IG::SimpleIslandManager& simpleIsla
 
 	const PxU32 articulationBatchSize = mSolverArticBatchSize;
 
-	//while(start<sentinel)
 	while (currentIsland < islandCount)
 	{
 		SolverIslandObjectsStep objectStarts;
-		objectStarts.articulations = mArticulationArray.begin() + currentArticulation;
-		objectStarts.bodies = mRigidBodyArray.begin() + currentBodyIndex;
-		objectStarts.externalAccelerations = &mRigidExternalAccelerations;
-		objectStarts.contactManagers = mContactList.begin() + currentContact;
-		objectStarts.constraintDescs = mSolverConstraintDescPool.begin() + constraintIndex;
-		objectStarts.orderedConstraintDescs = mOrderedSolverConstraintDescPool.begin() + constraintIndex;
-		objectStarts.constraintBatchHeaders = mContactConstraintBatchHeaders.begin() + constraintIndex;
-		objectStarts.tempConstraintDescs = mTempSolverConstraintDescPool.begin() + constraintIndex;
-		objectStarts.motionVelocities = mMotionVelocityArray.begin() + currentBodyIndex;
-		objectStarts.bodyCoreArray = mBodyCoreArray.begin() + currentBodyIndex;
-		objectStarts.islandIds = islandIds + currentIsland;
-		objectStarts.bodyRemapTable = mSolverBodyRemapTable.begin();
-		objectStarts.nodeIndexArray = mNodeIndexArray.begin() + currentBodyIndex;
+		objectStarts.articulations			= mArticulationArray.begin() + currentArticulation;
+		objectStarts.bodies					= mRigidBodyArray.begin() + currentBodyIndex;
+		objectStarts.externalAccelerations	= &mRigidExternalAccelerations;
+		objectStarts.contactManagers		= mContactList.begin() + currentContact;
+		objectStarts.constraintDescs		= mSolverConstraintDescPool.begin() + constraintIndex;
+		objectStarts.orderedConstraintDescs	= mOrderedSolverConstraintDescPool.begin() + constraintIndex;
+		objectStarts.constraintBatchHeaders	= mContactConstraintBatchHeaders.begin() + constraintIndex;
+		objectStarts.tempConstraintDescs	= mTempSolverConstraintDescPool.begin() + constraintIndex;
+		objectStarts.motionVelocities		= mMotionVelocityArray.begin() + currentBodyIndex;
+		objectStarts.bodyCoreArray			= mBodyCoreArray.begin() + currentBodyIndex;
+		objectStarts.islandIds				= islandIds + currentIsland;
+		objectStarts.bodyRemapTable			= mSolverBodyRemapTable.begin();
+		objectStarts.nodeIndexArray			= mNodeIndexArray.begin() + currentBodyIndex;
 
 		PxU32 startIsland = currentIsland;
 		PxU32 constraintCount = 0;
@@ -898,11 +871,11 @@ void DynamicsTGSContext::prepareBodiesAndConstraints(const SolverIslandObjectsSt
 
 			if (node.getNodeType() == IG::Node::eARTICULATION_TYPE)
 			{
-				articulationPtr[articIndex++] = node.getArticulation();
+				articulationPtr[articIndex++] = getObjectFromIG<FeatherstoneArticulation>(node);
 			}
 			else
 			{
-				PxsRigidBody* rigid = node.getRigidBody();
+				PxsRigidBody* rigid = getObjectFromIG<PxsRigidBody>(node);
 				PX_ASSERT(bodyIndex < (islandContext.mCounts.bodies + mKinematicCount + 1));
 				rigidBodyPtr[bodyIndex] = rigid;
 				bodyArrayPtr[bodyIndex] = &rigid->getCore();
@@ -931,8 +904,8 @@ void DynamicsTGSContext::prepareBodiesAndConstraints(const SolverIslandObjectsSt
 
 			if (contactManager)
 			{
-				const PxNodeIndex nodeIndex1 = islandSim.getNodeIndex1(contactEdgeIndex);
-				const PxNodeIndex nodeIndex2 = islandSim.getNodeIndex2(contactEdgeIndex);
+				const PxNodeIndex nodeIndex1 = islandSim.mCpuData.getNodeIndex1(contactEdgeIndex);
+				const PxNodeIndex nodeIndex2 = islandSim.mCpuData.getNodeIndex2(contactEdgeIndex);
 
 				PxsIndexedContactManager& indexedManager = indexedManagers[currentContactIndex++];
 				indexedManager.contactManager = contactManager;
@@ -945,8 +918,7 @@ void DynamicsTGSContext::prepareBodiesAndConstraints(const SolverIslandObjectsSt
 					if (node1.getNodeType() == IG::Node::eARTICULATION_TYPE)
 					{
 						indexedManager.articulation0 = nodeIndex1.getInd();
-						const PxU32 linkId = nodeIndex1.articulationLinkId();
-						node1.getArticulation()->fillIndexType(linkId, indexedManager.indexType0);
+						indexedManager.indexType0 = PxsIndexedInteraction::eARTICULATION;
 					}
 					else
 					{
@@ -976,8 +948,7 @@ void DynamicsTGSContext::prepareBodiesAndConstraints(const SolverIslandObjectsSt
 					if (node2.getNodeType() == IG::Node::eARTICULATION_TYPE)
 					{
 						indexedManager.articulation1 = nodeIndex2.getInd();
-						const PxU32 linkId = nodeIndex2.articulationLinkId();
-						node2.getArticulation()->fillIndexType(linkId, indexedManager.indexType1);
+						indexedManager.indexType1 = PxsIndexedInteraction::eARTICULATION;
 					}
 					else
 					{
@@ -1023,7 +994,7 @@ void DynamicsTGSContext::setupDescs(IslandContextStep& mIslandContext, const Sol
 	PxU32 nbIslands = mObjects.numIslands;
 	const IG::IslandId* const islandIds = mObjects.islandIds;
 
-	const IG::IslandSim& islandSim = mIslandManager->getAccurateIslandSim();
+	const IG::IslandSim& islandSim = mIslandManager.getAccurateIslandSim();
 
 	for (PxU32 i = 0; i < nbIslands; ++i)
 	{
@@ -1036,8 +1007,8 @@ void DynamicsTGSContext::setupDescs(IslandContextStep& mIslandContext, const Sol
 			PxSolverConstraintDesc& desc = *contactDescPtr;
 
 			const IG::Edge& edge = islandSim.getEdge(edgeId);
-			Dy::Constraint* constraint = mIslandManager->getConstraint(edgeId);
-			setDescFromIndices(desc, edgeId, *mIslandManager, mBodyRemapTable, mSolverBodyOffset, 
+			Dy::Constraint* constraint = mIslandManager.getConstraint(edgeId);
+			setDescFromIndices(desc, edgeId, mIslandManager, mBodyRemapTable, mSolverBodyOffset, 
 				mSolverBodyVelPool.begin());
 			desc.constraint = reinterpret_cast<PxU8*>(constraint);
 			desc.constraintType = DY_SC_TYPE_RB_1D;
@@ -1105,7 +1076,7 @@ void DynamicsTGSContext::preIntegrateBodies(PxsBodyCore** bodyArray, PxsRigidBod
 
 void DynamicsTGSContext::createSolverConstraints(PxSolverConstraintDesc* contactDescPtr, PxConstraintBatchHeader* headers, PxU32 nbHeaders,
 	PxsContactManagerOutputIterator& outputs, Dy::ThreadContext& islandThreadContext, Dy::ThreadContext& threadContext, PxReal stepDt, PxReal totalDt, PxReal invStepDt,
-	const PxReal biasCoefficient, PxI32 velIters)
+	const PxReal biasCoefficient)
 {
 	PX_UNUSED(totalDt);
 	//PX_PROFILE_ZONE("CreateConstraints", 0);
@@ -1116,11 +1087,7 @@ void DynamicsTGSContext::createSolverConstraints(PxSolverConstraintDesc* contact
 	PxTGSSolverBodyTxInertia* txInertias = mSolverBodyTxInertiaPool.begin();
 	PxTGSSolverBodyData* solverBodyDatas = mSolverBodyDataPool2.begin();
 
-	const PxReal invTotalDt = 1.f / totalDt;
-	PxReal denom = (totalDt);
-	if (velIters)
-		denom += stepDt;
-	const PxReal invTotalDtPlusStep = 1.f / denom;
+	const PxReal invTotalDt = 1.0f / totalDt;
 
 	for (PxU32 h = 0; h < nbHeaders; ++h)
 	{
@@ -1145,7 +1112,7 @@ void DynamicsTGSContext::createSolverConstraints(PxSolverConstraintDesc* contact
 
 				PxcNpWorkUnit& unit = cm->getWorkUnit();
 
-				PxsContactManagerOutput* cmOutput = &outputs.getContactManager(unit.mNpIndex);
+				PxsContactManagerOutput* cmOutput = &outputs.getContactManagerOutput(unit.mNpIndex);
 
 				cmOutputs[i] = cmOutput;
 
@@ -1223,7 +1190,7 @@ void DynamicsTGSContext::createSolverConstraints(PxSolverConstraintDesc* contact
 					blockDescs,
 					invStepDt,
 					totalDt,
-					invTotalDtPlusStep,
+					invTotalDt,
 					stepDt,
 					mBounceThreshold,
 					mFrictionOffsetThreshold,
@@ -1245,7 +1212,7 @@ void DynamicsTGSContext::createSolverConstraints(PxSolverConstraintDesc* contact
 					//PX_ASSERT(output.nbContacts != 0);
 
 					createFinalizeSolverContactsStep(blockDescs[i], output, threadContext,
-						invStepDt, invTotalDtPlusStep, totalDt, stepDt, mBounceThreshold, mFrictionOffsetThreshold, mCorrelationDistance, biasCoefficient, 
+						invStepDt, invTotalDt, totalDt, stepDt, mBounceThreshold, mFrictionOffsetThreshold, mCorrelationDistance, biasCoefficient,
 						blockAllocator);
 
 					getContactManagerConstraintDesc(output, *cm, desc);
@@ -2089,7 +2056,6 @@ class SetupSolverConstraintsSubTask : public Cm::Task
 	PxReal mBiasCoefficient;
 	DynamicsTGSContext& mContext;
 	ThreadContext& mIslandThreadContext;
-	PxI32 mVelIters;
 
 	PX_NOCOPY(SetupSolverConstraintsSubTask)
 
@@ -2099,10 +2065,9 @@ public:
 
 	SetupSolverConstraintsSubTask(PxSolverConstraintDesc* contactDescPtr, PxConstraintBatchHeader* headers, PxU32 nbHeaders,
 		PxsContactManagerOutputIterator& outputs, PxReal stepDt, PxReal totalDt, PxReal invStepDt, PxReal invDtTotal, 
-		PxReal biasCoefficient, ThreadContext& islandThreadContext, DynamicsTGSContext& context, PxI32 velIters) : Cm::Task(context.getContextId()),
+		PxReal biasCoefficient, ThreadContext& islandThreadContext, DynamicsTGSContext& context) : Cm::Task(context.getContextId()),
 		mContactDescPtr(contactDescPtr), mHeaders(headers), mNbHeaders(nbHeaders), mOutputs(outputs), mStepDt(stepDt), mTotalDt(totalDt), mInvStepDt(invStepDt),
-		mInvDtTotal(invDtTotal), mBiasCoefficient(biasCoefficient), mContext(context), mIslandThreadContext(islandThreadContext),
-		mVelIters(velIters)
+		mInvDtTotal(invDtTotal), mBiasCoefficient(biasCoefficient), mContext(context), mIslandThreadContext(islandThreadContext)
 	{
 	}
 
@@ -2113,7 +2078,7 @@ public:
 		ThreadContext* tempContext = mContext.getThreadContext();
 		tempContext->mConstraintBlockStream.reset();
 		mContext.createSolverConstraints(mContactDescPtr, mHeaders, mNbHeaders, mOutputs, mIslandThreadContext, *tempContext, mStepDt, mTotalDt, mInvStepDt,
-			mBiasCoefficient, mVelIters);
+			mBiasCoefficient);
 		mContext.putThreadContext(tempContext);
 	}
 };
@@ -2148,10 +2113,7 @@ public:
 		const PxReal dt = mDynamicsContext.getDt();
 		
 		const PxReal invStepDt = PxMin(mDynamicsContext.getMaxBiasCoefficient(), mIslandContext.mInvStepDt);
-		PxReal denom = dt;
-		if (mIslandContext.mVelIters)
-			denom += mIslandContext.mStepDt;
-		PxReal invDt = 1.f / denom;
+		const PxReal invDt = 1.0f / dt;
 
 		ThreadContext* threadContext = mDynamicsContext.getThreadContext();
 		threadContext->mConstraintBlockStream.reset(); //ensure there's no left-over memory that belonged to another island
@@ -2220,8 +2182,7 @@ public:
 		{
 			const PxU32 nbConstraints = PxMin(nbBatches - a, SetupSolverConstraintsSubTask::MaxPerTask);
 			SetupSolverConstraintsSubTask* task = PX_PLACEMENT_NEW(mContext.mTaskPool.allocate(sizeof(SetupSolverConstraintsSubTask)), SetupSolverConstraintsSubTask)
-				(mContactDescPtr, hdr + a, nbConstraints, mOutputs, mIslandContext.mStepDt, mTotalDt, mIslandContext.mInvStepDt, mContext.mInvDt, mIslandContext.mBiasCoefficient, mThreadContext, mContext,
-					mIslandContext.mVelIters);
+				(mContactDescPtr, hdr + a, nbConstraints, mOutputs, mIslandContext.mStepDt, mTotalDt, mIslandContext.mInvStepDt, mContext.mInvDt, mIslandContext.mBiasCoefficient, mThreadContext, mContext);
 
 			task->setContinuation(mCont);
 			task->removeReference();
@@ -2530,7 +2491,7 @@ public:
 		
 		if (mThreadContext.mConstraintsPerPartition.size())
 		{
-			const PxU32 threadCount = this->getTaskManager()->getCpuDispatcher()->getWorkerCount();
+			const PxU32 threadCount = getTaskManager()->getCpuDispatcher()->getWorkerCount();
 
 			PxU32 nbHeadersPerPartition;
 			

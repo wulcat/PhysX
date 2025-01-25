@@ -34,11 +34,10 @@
 #include "NpAggregate.h"
 #include "ScScene.h"
 #if PX_SUPPORT_GPU_PHYSX
-	#include "NpSoftBody.h"
 	#include "NpPBDParticleSystem.h"
 	#include "NpParticleBuffer.h"
-	#include "NpFEMCloth.h"
-	#include "NpHairSystem.h"
+	#include "NpDeformableSurface.h"
+	#include "NpDeformableVolume.h"
 	#include "cudamanager/PxCudaContextManager.h"
 	#include "cudamanager/PxCudaContext.h"	
 #endif
@@ -141,7 +140,7 @@ void NpScene::fetchResultsPostContactCallbacks()
 {
 	// PT: I put this here for now, as initially we even considered making this a PxExtensions helper. To make it more
 	// efficient / multithread it we could eventually move this deeper in the Sc-level pipeline.
-	if(mScene.getFlags() & PxSceneFlag::eENABLE_BODY_ACCELERATIONS)
+	if((mScene.getFlags() & PxSceneFlag::eENABLE_BODY_ACCELERATIONS) && !(mScene.getFlags() & PxSceneFlag::eENABLE_DIRECT_GPU_API))
 	{
 		// PT: we store the acceleration data in a separate/dedicated array, so that memory usage doesn't increase for
 		// people who don't use the flag (i.e. most users). The drawback is that there's more cache misses here during the
@@ -151,73 +150,37 @@ void NpScene::fetchResultsPostContactCallbacks()
 
 		const float oneOverDt = mElapsedTime != 0.0f ? 1.0f/mElapsedTime : 0.0f;
 
-		if(1)
+		// PT: this version assumes we index mRigidDynamicsAccelerations as we do mRigidDynamics (with getRigidActorArrayIndex), i.e. we
+		// need to update that array when objects are removed (see removeFromRigidActorListT)
+
+		// PT: another (archived) version used getRigidActorSceneIndex(). The acceleration array could become larger than necessary,
+		// but the index was constant for the lifetime of the object. At this point we could just have used a hashmap.
+
+		PxU32 size = mRigidDynamics.size();
+		NpRigidDynamic** rigidDynamics = mRigidDynamics.begin();
+
+		if(mRigidDynamicsAccelerations.size()!=size)
+			mRigidDynamicsAccelerations.resize(size);
+
+		Acceleration* accels = mRigidDynamicsAccelerations.begin();
+		while(size--)
 		{
-			// PT: this version assumes we index mRigidDynamicsAccelerations as we do mRigidDynamics (with getRigidActorArrayIndex), i.e. we
-			// need to update that array when objects are removed (see removeFromRigidActorListT)
+			const NpRigidDynamic* current = *rigidDynamics++;
+			const Sc::BodyCore&	core = current->getCore();
 
-			PxU32 size = mRigidDynamics.size();
-			if(mRigidDynamicsAccelerations.size()!=size)
-			{
-				mRigidDynamicsAccelerations.resize(size);
-			}
+			const PxVec3 linVel = core.getLinearVelocity();
+			const PxVec3 angVel = core.getAngularVelocity();
 
-			NpRigidDynamic** rigidDynamics = mRigidDynamics.begin();
-			Acceleration* accels = mRigidDynamicsAccelerations.begin();
-			while(size--)
-			{
-				const NpRigidDynamic* current = *rigidDynamics++;
-				const Sc::BodyCore&	core = current->getCore();
+			const PxVec3 deltaLinVel = linVel - accels->mPrevLinVel;
+			const PxVec3 deltaAngVel = angVel - accels->mPrevAngVel;
 
-				const PxVec3 linVel = core.getLinearVelocity();
-				const PxVec3 angVel = core.getAngularVelocity();
+			accels->mLinAccel = deltaLinVel * oneOverDt;
+			accels->mAngAccel = deltaAngVel * oneOverDt;
 
-				const PxVec3 deltaLinVel = linVel - accels->mPrevLinVel;
-				const PxVec3 deltaAngVel = angVel - accels->mPrevAngVel;
+			accels->mPrevLinVel = linVel;
+			accels->mPrevAngVel = angVel;
 
-				accels->mLinAccel = deltaLinVel * oneOverDt;
-				accels->mAngAccel = deltaAngVel * oneOverDt;
-
-				accels->mPrevLinVel = linVel;
-				accels->mPrevAngVel = angVel;
-
-				accels++;
-			}
-		}
-		else
-		{
-			// PT: this version uses getRigidActorSceneIndex(). The acceleration array can become larger than necessary,
-			// but the index is constant for the lifetime of the object. At this point we could just use a hashmap.
-
-			PxU32 size = mRigidDynamics.size();
-			NpRigidDynamic** rigidDynamics = mRigidDynamics.begin();
-			while(size--)
-			{
-				const NpRigidDynamic* current = *rigidDynamics++;
-
-				const PxU32 index = current->getRigidActorSceneIndex();
-				if(index+1>mRigidDynamicsAccelerations.size())
-				{
-					mRigidDynamicsAccelerations.resize(index+1);
-				}
-				Acceleration* accels = mRigidDynamicsAccelerations.begin();
-				accels += index;
-
-				const Sc::BodyCore&	core = current->getCore();
-
-				const PxVec3 linVel = core.getLinearVelocity();
-				const PxVec3 angVel = core.getAngularVelocity();
-
-				const PxVec3 deltaLinVel = linVel - accels->mPrevLinVel;
-				const PxVec3 deltaAngVel = angVel - accels->mPrevAngVel;
-
-				accels->mLinAccel = deltaLinVel * oneOverDt;
-				accels->mAngAccel = deltaAngVel * oneOverDt;
-
-				accels->mPrevLinVel = linVel;
-				accels->mPrevAngVel = angVel;
-			}
-
+			accels++;
 		}
 	}
 
@@ -499,9 +462,9 @@ bool NpScene::fetchResults(bool block, PxU32* errorState)
 
 			}
 
-			//end frame
-			omniPvdSampler->sampleScene(this);
-
+			NpOmniPvdSceneClient& ovdClient = getSceneOvdClientInternal();
+			ovdClient.resetForces();
+			ovdClient.incrementFrame(*pvdWriter, true);
 			OMNI_PVD_WRITE_SCOPE_END
 		}
 #endif
@@ -546,32 +509,54 @@ bool NpScene::fetchResultsStart(const PxContactPairHeader*& contactPairs, PxU32&
 	return true;
 }
 
-void NpContactCallbackTask::setData(NpScene* scene, const PxContactPairHeader* contactPairHeaders, const uint32_t nbContactPairHeaders)
+namespace
 {
-	mScene = scene;
-	mContactPairHeaders = contactPairHeaders;
-	mNbContactPairHeaders = nbContactPairHeaders;
-}
-
-void NpContactCallbackTask::run()
-{
-	PxSimulationEventCallback* callback = mScene->getSimulationEventCallback();
-	if (!callback)
-		return;
-
-	mScene->lockRead();
-	for (uint32_t i = 0; i<mNbContactPairHeaders; ++i)
+	class NpContactCallbackTask : public physx::PxLightCpuTask
 	{
-		const PxContactPairHeader& pairHeader = mContactPairHeaders[i];
-		callback->onContact(pairHeader, pairHeader.pairs, pairHeader.nbPairs);
-	}
-	mScene->unlockRead();
+		NpScene*					mScene;
+		const PxContactPairHeader*	mContactPairHeaders;
+		const PxU32					mNbContactPairHeaders;
+	public:
+
+		PX_FORCE_INLINE	NpContactCallbackTask(NpScene* scene, const PxContactPairHeader* contactPairHeaders, PxU64 contextID, PxU32 nbContactPairHeaders) :
+			mScene					(scene),
+			mContactPairHeaders		(contactPairHeaders),
+			mNbContactPairHeaders	(nbContactPairHeaders)
+		{
+			setContextId(contextID);
+		}
+
+		virtual void run()	PX_OVERRIDE PX_FINAL
+		{
+			PxSimulationEventCallback* callback = mScene->getSimulationEventCallback();
+			if (!callback)
+				return;
+
+			mScene->lockRead();
+			{
+				PX_PROFILE_ZONE("USERCODE - PxSimulationEventCallback::onContact", getContextId());
+				PxU32 nb = mNbContactPairHeaders;
+				for(PxU32 i=0; i<nb; i++)
+				{
+					const PxContactPairHeader& pairHeader = mContactPairHeaders[i];
+					callback->onContact(pairHeader, pairHeader.pairs, pairHeader.nbPairs);
+				}
+			}
+			mScene->unlockRead();
+		}
+
+		virtual const char* getName() const	PX_OVERRIDE PX_FINAL
+		{
+			return "NpContactCallbackTask";
+		}
+	};
 }
 
 void NpScene::processCallbacks(PxBaseTask* continuation)
 {
 	PX_PROFILE_START_CROSSTHREAD("Basic.processCallbacks", getContextId());
 	PX_PROFILE_ZONE("Sim.processCallbacks", getContextId());
+
 	//ML: because Apex destruction callback isn't thread safe so that we make this run single thread first
 	const PxArray<PxContactPairHeader>& pairs = mScene.getQueuedContactPairHeaders();
 	const PxU32 nbPairs = pairs.size();
@@ -582,8 +567,7 @@ void NpScene::processCallbacks(PxBaseTask* continuation)
 
 	for (PxU32 i = 0; i < nbPairs; i += nbToProcess)
 	{
-		NpContactCallbackTask* task = PX_PLACEMENT_NEW(flushPool->allocate(sizeof(NpContactCallbackTask)), NpContactCallbackTask)();
-		task->setData(this, contactPairs+i, PxMin(nbToProcess, nbPairs - i));
+		NpContactCallbackTask* task = PX_PLACEMENT_NEW(flushPool->allocate(sizeof(NpContactCallbackTask)), NpContactCallbackTask)(this, contactPairs+i, getContextId(), PxMin(nbToProcess, nbPairs - i));
 		task->setContinuation(continuation);
 		task->removeReference();
 	}
@@ -615,7 +599,13 @@ void NpScene::fetchResultsFinish(PxU32* errorState)
 		OmniPvdPxSampler* omniPvdSampler = NpPhysics::getInstance().mOmniPvdSampler;
 		if (omniPvdSampler && omniPvdSampler->isSampling())
 		{
-			omniPvdSampler->sampleScene(this);
+			OMNI_PVD_GET_WRITER(pvdWriter)
+			if (pvdWriter)
+			{
+				NpOmniPvdSceneClient& ovdClient = getSceneOvdClientInternal();
+				ovdClient.resetForces();
+				ovdClient.incrementFrame(*pvdWriter, true);
+			}
 		}
 #endif
 	}
