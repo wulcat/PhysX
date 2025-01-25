@@ -28,7 +28,7 @@ STRING(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWERCASE)
 
 #TODO: Fix warnings
 
-SET(CLANG_WARNINGS "-ferror-limit=0 -Wall -Wextra -Wstrict-aliasing=2 -Weverything\
+SET(CLANG_WARNINGS "-ferror-limit=0 -Wall -Wextra -Wstrict -Weverything\
     -Wno-unused-but-set-variable \
     -Wno-switch-default \
     -Wno-cast-qual \
@@ -77,6 +77,10 @@ SET(CLANG_WARNINGS "-ferror-limit=0 -Wall -Wextra -Wstrict-aliasing=2 -Weverythi
     -Wno-zero-as-null-pointer-constant \
     -Wno-reserved-identifier \
     -Wno-undefined-func-template \
+	-Wno-unsafe-buffer-usage \
+    -Wno-invalid-offsetof \
+    -Wno-switch-default \
+    -Wno-unused-but-set-variable \
 ")
 
 SET(GCC_WARNINGS "-Wall -Werror \
@@ -115,17 +119,17 @@ IF(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
 		SET(AARCH64_FLAGS "-ffp-contract=off")
 	ENDIF()
 ELSE()
-	SET(GCC_WARNINGS "-Wall\
-		-Wno-array-bounds\
-		-Wno-class-memaccess\
-		-Wno-invalid-offsetof\
-		-Wno-mismatched-new-delete\
-		-Wno-nonnull-compare\
-		-Wno-pragmas\
-		-Wno-uninitialized\
-		-Wno-unused-function\
-		-Wno-stringop-overflow\
-	")
+	# SET(GCC_WARNINGS "-Wall\
+	# 	-Wno-array-bounds\
+	# 	-Wno-class-memaccess\
+	# 	-Wno-invalid-offsetof\
+	# 	-Wno-mismatched-new-delete\
+	# 	-Wno-nonnull-compare\
+	# 	-Wno-pragmas\
+	# 	-Wno-uninitialized\
+	# 	-Wno-unused-function\
+	# 	-Wno-stringop-overflow\
+	# ")
 	SET(AARCH64_FLAGS "")
 ENDIF()
 
