@@ -29,8 +29,8 @@
 #
 
 SET(SIMULATIONCONTROLLER_PLATFORM_INCLUDES
-	${PHYSX_SOURCE_DIR}/common/src/linux
-	${PHYSX_SOURCE_DIR}/lowlevel/linux/include
+	# ${PHYSX_SOURCE_DIR}/common/src/linux
+	# ${PHYSX_SOURCE_DIR}/lowlevel/linux/include
 )
 
 # Use generator expressions to set config specific preprocessor definitions

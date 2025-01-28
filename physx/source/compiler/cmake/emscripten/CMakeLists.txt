@@ -209,7 +209,7 @@ ELSE()
 	INCLUDE(SimulationController.cmake)
 	INCLUDE(PhysXPvdSDK.cmake)
 	INCLUDE(PhysXTask.cmake)
-	# INCLUDE(emscripten/PhysXWasmBindings.cmake)
+	# INCLUDE(emscripten/PhysXWasmBindings.cmake) // since we static libaries we disable this
 
 	# Set folder PhysX SDK to all common SDK source projects
 	SET_PROPERTY(TARGET PhysX PROPERTY FOLDER "PhysX SDK")

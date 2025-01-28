@@ -56,11 +56,14 @@ ADD_CUSTOM_COMMAND(
 )
 ADD_CUSTOM_TARGET(physx-js-bindings ALL DEPENDS glue.js glue.o)
 
+message("meeeeow")
 SET(PHYSX_TARGETS PhysX PhysXCharacterKinematic PhysXCommon PhysXCooking PhysXExtensions PhysXFoundation PhysXVehicle2 PhysXPvdSDK)
 FOREACH(_TARGET ${PHYSX_TARGETS})
 	LIST(APPEND PHYSX_LIBS $<TARGET_FILE:${_TARGET}>)
+	
 ENDFOREACH()
-
+message("${PHYSX_LIBS}")
+message("${EMCC_WASM_ARGS}")
 ADD_CUSTOM_COMMAND(
 		OUTPUT physx-js-webidl.js physx-js-webidl.wasm
 		COMMAND emcc glue.o ${PHYSX_LIBS} ${EMCC_WASM_ARGS} -o physx-js-webidl.js

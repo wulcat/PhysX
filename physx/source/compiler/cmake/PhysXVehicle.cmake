@@ -117,7 +117,7 @@ TARGET_INCLUDE_DIRECTORIES(PhysXVehicle
 
 	PRIVATE ${PHYSX_SOURCE_DIR}/physxextensions/src/serialization/Xml
 
-	PRIVATE ${PHYSX_SOURCE_DIR}/pvdsdk/src
+	# PRIVATE ${PHYSX_SOURCE_DIR}/pvdsdk/src
 	
 	PRIVATE ${PHYSX_SOURCE_DIR}/pvd/include	
 )

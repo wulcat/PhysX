@@ -29,8 +29,8 @@
 #
 
 SET(LOWLEVELAABB_PLATFORM_INCLUDES
-	${PHYSX_SOURCE_DIR}/common/src/linux
-	${PHYSX_SOURCE_DIR}/lowlevelaabb/linux/include
+	# ${PHYSX_SOURCE_DIR}/common/src/linux
+	# ${PHYSX_SOURCE_DIR}/lowlevelaabb/linux/include
 )
 
 
