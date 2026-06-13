@@ -22,7 +22,7 @@
 ## (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ## OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ##
-## Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+## Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 
 #
 # Build PhysX (PROJECT not SOLUTION) common
@@ -43,7 +43,6 @@ include(${PHYSX_ROOT_DIR}/${PROJECT_CMAKE_FILES_DIR}/${TARGET_BUILD_PLATFORM}/Ph
 
 SET(PHYSX_HEADERS
 	${PHYSX_ROOT_DIR}/include/PxActor.h
-	${PHYSX_ROOT_DIR}/include/PxActorData.h
 	${PHYSX_ROOT_DIR}/include/PxAggregate.h
 	${PHYSX_ROOT_DIR}/include/PxArticulationFlag.h
 	${PHYSX_ROOT_DIR}/include/PxArticulationJointReducedCoordinate.h
@@ -134,8 +133,6 @@ SET(PHYSX_COMMON_HEADERS
 	${PHYSX_ROOT_DIR}/include/common/PxCollection.h
 	${PHYSX_ROOT_DIR}/include/common/PxCoreUtilityTypes.h
 	${PHYSX_ROOT_DIR}/include/common/PxInsertionCallback.h
-	${PHYSX_ROOT_DIR}/include/common/PxMetaData.h
-	${PHYSX_ROOT_DIR}/include/common/PxMetaDataFlags.h
 	${PHYSX_ROOT_DIR}/include/common/PxPhysXCommonConfig.h
 	${PHYSX_ROOT_DIR}/include/common/PxProfileZone.h
 	${PHYSX_ROOT_DIR}/include/common/PxRenderBuffer.h
@@ -263,7 +260,6 @@ SET(PHYSX_CORE_SOURCE
 	${PX_SOURCE_DIR}/NpParticleBuffer.cpp
 	${PX_SOURCE_DIR}/NpConstraint.cpp
 	${PX_SOURCE_DIR}/NpFactory.cpp
-	${PX_SOURCE_DIR}/NpMetaData.cpp
 	${PX_SOURCE_DIR}/NpPhysics.cpp
 	${PX_SOURCE_DIR}/NpBounds.h
 	${PX_SOURCE_DIR}/NpBounds.cpp
@@ -356,9 +352,7 @@ TARGET_INCLUDE_DIRECTORIES(PhysX
 	PRIVATE ${PHYSX_SOURCE_DIR}/common/src
 
 	PRIVATE ${PHYSX_SOURCE_DIR}/physx/src
-	PRIVATE ${PHYSX_SOURCE_DIR}/physx/src/device
 	PRIVATE ${PHYSX_SOURCE_DIR}/physxgpu/include
-
 
 	PRIVATE ${PHYSX_SOURCE_DIR}/geomutils/include
 	PRIVATE ${PHYSX_SOURCE_DIR}/geomutils/src
@@ -401,6 +395,11 @@ TARGET_INCLUDE_DIRECTORIES(PhysX
 #   PRIVATE ${PHYSX_SOURCE_DIR}/omnipvd
   PRIVATE ${PHYSX_ROOT_DIR}/pvdruntime/include
 )
+
+# Conditionally add the internal device directory when not in public release mode
+IF(NOT PUBLIC_RELEASE)
+    TARGET_INCLUDE_DIRECTORIES(PhysX PRIVATE ${PHYSX_SOURCE_DIR}/physx/src/internal/device)
+ENDIF()
 
 TARGET_COMPILE_DEFINITIONS(PhysX
 

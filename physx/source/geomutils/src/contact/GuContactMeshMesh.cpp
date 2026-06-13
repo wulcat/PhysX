@@ -22,7 +22,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
@@ -71,7 +71,7 @@ PX_FORCE_INLINE bool needsRefinement(const PxReal triRefThreshold, const Transfo
 }
 
 // Find contacts between an SDF and a triangle mesh and return the number of contacts generated
-inline PxU32 sdfMeshCollision (
+PxU32 sdfMeshCollision (
 		const PxTransform32& PX_RESTRICT tfSdf, const PxTriangleMeshGeometry& PX_RESTRICT sdfGeom,
 		const PxTransform32& PX_RESTRICT tfMesh, const PxTriangleMeshGeometry& PX_RESTRICT meshGeom,
 		ContactReduction& contactReducer, const PxReal totalContactDistance, bool flipContactNormals
@@ -255,9 +255,15 @@ bool Gu::contactMeshMesh(GU_CONTACT_METHOD_ARGS)
 
 	const bool geom0HasSdf = geom0.triangleMesh->getSDF() != NULL,
 			   geom1HasSdf = geom1.triangleMesh->getSDF() != NULL;
+
+	PX_ASSERT(geom0HasSdf || geom1HasSdf); // require at least one SDF
+	if (!geom0HasSdf && !geom1HasSdf)
+	{
+		return false;
+	}
+
 	if (!(geom0HasSdf && geom1HasSdf))
 	{
-		PX_ASSERT(geom0HasSdf || geom1HasSdf); // require at least one SDF
 		if (geom0HasSdf)
 			nbContacts += sdfMeshCollision(transform0, geom0, transform1, geom1, contactReducer, contactDistance, true);
 		else

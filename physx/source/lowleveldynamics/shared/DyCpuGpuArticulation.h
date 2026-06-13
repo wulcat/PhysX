@@ -22,7 +22,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -30,6 +30,7 @@
 #define DY_ARTICULATION_CPUGPU_H
 
 #include "foundation/PxSimpleTypes.h"
+#include "foundation/PxBasicTemplates.h"
 #include "PxArticulationJointReducedCoordinate.h"
 #include "CmSpatialVector.h"
 #include "DyFeatherstoneArticulationUtils.h"
@@ -138,16 +139,6 @@ PX_CUDA_CALLABLE PX_FORCE_INLINE ArticulationImplicitDriveDesc computeImplicitDr
 		driveDesc = computeImplicitDriveParamsAccelerationDrive(stiffness, damping, dt, simDt, recipUnitResponse, geomError, targetVelocity, isTGSSolver);
 	}
 	break;
-	case PxArticulationDriveType::eTARGET:
-	{
-		driveDesc = computeImplicitDriveParamsForceDrive(1e+25f, 0.0f, dt, simDt, unitResponse, geomError, targetVelocity, isTGSSolver);
-	}
-	break;
-	case PxArticulationDriveType::eVELOCITY:
-	{
-		driveDesc = computeImplicitDriveParamsForceDrive(0.0f, 1e+25f, dt, simDt, unitResponse, geomError, targetVelocity, isTGSSolver);
-	}
-	break;
 	case PxArticulationDriveType::eNONE:
 	{
 		PX_ASSERT(false);
@@ -155,6 +146,25 @@ PX_CUDA_CALLABLE PX_FORCE_INLINE ArticulationImplicitDriveDesc computeImplicitDr
 	break;
 	}
 	return driveDesc;
+}
+
+/**
+\brief Compute the friction impulse. 
+\param[in] frictionImpulse is the accumulated frictiom impulse on the current simulation step.
+\param[in] staticFrictionImpulse is threshold to prevent motion of the joint.
+\param[in] dynamicFrictionImpulse is constant friction applied to moving joints .
+\param[in] viscousFrictionCoefficient is the coefficient of velocity dependent friction term.
+\param[in] jointVel is the current velocity of the joint.
+\return The friction impulse.
+*/
+PX_CUDA_CALLABLE PX_FORCE_INLINE PxReal computeFrictionImpulse
+(PxReal frictionImpulse, const PxReal staticFrictionImpulse, const PxReal dynamicFrictionImpulse, const PxReal viscousFrictionCoefficient, const PxReal jointVel)
+{
+	if (PxAbs(frictionImpulse) > staticFrictionImpulse)
+		{
+			frictionImpulse = PxClamp(frictionImpulse, -dynamicFrictionImpulse - viscousFrictionCoefficient * PxAbs(jointVel), dynamicFrictionImpulse + viscousFrictionCoefficient * PxAbs(jointVel));
+		}
+	return frictionImpulse;
 }
 
 /**
@@ -176,6 +186,148 @@ PX_CUDA_CALLABLE PX_FORCE_INLINE PxReal computeDriveImpulse
 		- jointDeltaPos * driveDesc.driveBiasCoefficient
 		+ elapsedTime * driveDesc.driveTargetPosBias;
 	return unclampedForce;
+}
+
+
+
+PX_CUDA_CALLABLE PX_INLINE PxPair<PxReal, PxReal> computeBoundsForNegativeImpulse(
+    PxReal velDeviation, 
+    PxReal max, 
+    PxReal denom1, 
+    PxReal denom2,
+	PxReal impulse)
+{
+    PxReal bound1;
+    PxReal bound2;
+
+    // invalid case
+	if(PxAbs(denom1) < PX_EPS_F32)
+	{
+		return PxPair<PxReal, PxReal>(-PX_MAX_F32, PX_MAX_F32);
+	}
+	if (PxAbs(denom2) < PX_EPS_F32) 
+	{
+        bound1 = (velDeviation - max) / denom1;
+		if (PxAbs(velDeviation + max) < PX_EPS_F32)
+			bound2 = PX_MAX_F32;
+		else
+      	  bound2 = (velDeviation + max) > 0.0f  ? PX_MAX_F32 : -PX_MAX_F32;
+		
+		return PxPair<PxReal, PxReal>(bound1, PxMin(0.0f, bound2));
+    }
+    
+	bound1 = (velDeviation - max) / denom1;
+    bound2 = (velDeviation + max) / denom2;
+
+
+    if (denom2 >= 0.0f) {
+		return PxPair<PxReal, PxReal>(PxMax(bound1, impulse), PxMin(0.0f, bound2));
+	}
+	else {
+		return PxPair<PxReal, PxReal>( PxMax(PxMax(bound1, bound2), impulse), 0.0f);
+	}
+}
+
+
+PX_CUDA_CALLABLE PX_INLINE PxPair<PxReal, PxReal> computeBoundsForPositiveImpulse(
+    PxReal velDeviation, 
+    PxReal max, 
+    PxReal denom1, 
+    PxReal denom2,
+	PxReal impulse)
+{
+    PxReal bound1;
+    PxReal bound2;
+
+    // invalid case
+	if(PxAbs(denom2) < PX_EPS_F32)
+	{
+		return PxPair<PxReal, PxReal>(-PX_MAX_F32, PX_MAX_F32);
+	}
+
+	if (PxAbs(denom1) < PX_EPS_F32) 
+	{
+        bound2 = (velDeviation + max) / denom2;
+		if (PxAbs(velDeviation - max) < PX_EPS_F32)
+			bound1 = -PX_MAX_F32;
+		else
+      	  bound1 = (velDeviation - max) > 0.0f  ? PX_MAX_F32 : -PX_MAX_F32;
+		return PxPair<PxReal, PxReal>(PxMax(0.0f, bound1), bound2);
+    }
+    bound1 = (velDeviation - max) / denom1;
+    bound2 = (velDeviation + max) / denom2;
+
+    if (denom1 >= 0.0f) {
+		return PxPair<PxReal, PxReal>(PxMax(0.0f, bound1), PxMin(bound2, impulse));
+	}
+	else {
+		return PxPair<PxReal, PxReal>(0.0f, PxMin(PxMin(bound1, bound2), impulse));
+	}
+}
+
+/**
+\brief Compute the drive impulse implicitly. 
+\param[in] jointVel0 is the joint velocity before drive impulse is applied.
+\param[in] driveImpulse0 accumulated drive effort until the current iteration.
+\param[in] driveImpulse drive impulse to be clamped.
+\param[in] response response.
+\param[in] maxJointVel max actuator velocity.
+\param[in] maxImpulse max impulse.
+\param[in] speedImpulseGradient speed impulse gradient of the performance envelope.
+\return The clamped drive impulse.
+*/
+PX_CUDA_CALLABLE PX_INLINE PxReal clampDriveImpulse(
+    PxReal jointVel0,
+    PxReal driveImpulse0,
+    PxReal driveImpulse,
+    PxReal response,
+    PxReal maxJointVel,
+    PxReal maxImpulse,
+    PxReal speedImpulseGradient,
+    PxReal velocityDependentResistance)
+{
+
+	PxReal velDeviation = driveImpulse0 * response - jointVel0;
+	PxPair<PxReal, PxReal> bounds1;
+	PxPair<PxReal, PxReal> bounds2;
+
+	if (driveImpulse > 0.0f)  {
+		PxReal denom1 = response - speedImpulseGradient;
+		PxReal denom2 = response + speedImpulseGradient;
+		bounds1 = computeBoundsForPositiveImpulse(velDeviation, maxJointVel, denom1, denom2, driveImpulse);
+		if (velocityDependentResistance == 0.0f) {
+			bounds2 = PxPair<PxReal, PxReal>(-maxImpulse, maxImpulse);
+		} else {
+			denom1 =  response - 1.0f / velocityDependentResistance;
+			denom2 =  response + 1.0f / velocityDependentResistance;
+			bounds2 = computeBoundsForPositiveImpulse(velDeviation, maxImpulse / velocityDependentResistance, denom1, denom2, driveImpulse);
+		}
+
+	}
+
+	else
+	{
+		PxReal denom1 = response + speedImpulseGradient;
+		PxReal denom2 = response - speedImpulseGradient;
+		bounds1 = computeBoundsForNegativeImpulse(velDeviation, maxJointVel, denom1, denom2, driveImpulse);
+		if (velocityDependentResistance == 0.0f) {
+			bounds2 = PxPair<PxReal, PxReal>(-maxImpulse, maxImpulse);
+		} else {
+			denom1 =  response + 1.0f / velocityDependentResistance;
+			denom2 =  response - 1.0f / velocityDependentResistance;
+			bounds2 = computeBoundsForNegativeImpulse(velDeviation, maxImpulse / velocityDependentResistance, denom1, denom2, driveImpulse);
+		}
+	}
+
+    // Combine bounds
+    PxReal lowerBound = PxMax(bounds1.first, bounds2.first);
+    PxReal upperBound = PxMin(bounds1.second, bounds2.second);
+
+    // Check for invalid bounds
+    if (lowerBound > upperBound) {
+        return 0.0f;
+    }
+    return PxClamp(driveImpulse, lowerBound, upperBound);
 }
 
 /**
@@ -577,4 +729,3 @@ PX_CUDA_CALLABLE PX_FORCE_INLINE void computeMimicJointImpulses
 } //namespace Dy
 } //namespace physx
 #endif //DY_ARTICULATION_CPUGPU_H
-

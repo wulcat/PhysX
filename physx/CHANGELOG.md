@@ -1,3 +1,233 @@
+# v5.6.1-107.3
+
+## General
+
+### Fixed
+
+* PxHashSet would crash after adding ~300 million entries to the set due to internal PxU32 overflows. This has been fixed.
+* The documentation build tool had a regression that made the search not find terms properly.
+
+### Added
+
+* Update NVCC compiler options to generate SASS for Blackwell.
+
+## Articulations
+
+### Deprecated
+
+* Deprecated PxArticulationFlag::eDRIVE_LIMITS_ARE_FORCES. Joint dofs configured to use PxPerformanceEnvelope will already ignore the flag and assume they are configured for forces/torques.
+
+### Added
+
+* A new motor model for clamping total joint effort (force or torque). The total joint effort is comprised of drive effort and joint effort applied through articulation cache by the user. Please see PxPerformanceEnvelope for clamping details.
+* New direct GPU API getters for PxArticulationGPUAPIReadType::eFIXED_TENDON, PxArticulationGPUAPIReadType::eFIXED_TENDON_JOINT, PxArticulationGPUAPIReadType::eSPATIAL_TENDON, and PxArticulationGPUAPIReadType::eSPATIAL_TENDON_ATTACHMENT.
+* PxArticulationFixedTendon, PxArticulationTendonJoint, PxArticulationSpatialTendon, and PxArticulationAttachment's parameter getters now report errors if called when PxSceneFlag::eENABLE_DIRECT_GPU_API is enabled.
+
+### Fixed
+
+* When running on GPU, the link incoming joint force was not being reported correctly in certain scenarios (PxArticulationCacheFlag::eLINK_INCOMING_JOINT_FORCE, PxArticulationGPUAPIReadType::eLINK_INCOMING_JOINT_FORCE).
+
+## Joints
+
+### Deprecated
+
+* PxD6Drive::eSWING has been deprecated. Furthermore, the angular joint drive precedence system (PxD6Drive::eSLERP taking precedence over PxD6Drive::eSWING/eTWIST) has been deprecated too. The recommended approach is now to first define the desired angular drive model before setting any drive parameters. The new API PxD6Joint::setAngularDriveConfig() can be used for this purpose. The recommended workflow is as follows:
+  * To use PxD6Drive::eSLERP, first call PxD6Joint::setAngularDriveConfig(PxD6AngularDriveConfig::eSLERP) (PxD6Drive::eSWING/eTWIST/eSWING1/eSWING2 can not be used in this config).
+  * To use PxD6Drive::eTWIST/eSWING1/eSWING2, first call PxD6Joint::setAngularDriveConfig(PxD6AngularDriveConfig::eSWING_TWIST) (PxD6Drive::eSWING/eSLERP can not be used in this config).
+  * PxD6Drive::eSWING should not be used anymore. The configuration of the previous bullet point can be used instead together with setting identical drive parameters for PxD6Drive::eSWING1/eSWING2.
+
+### Added
+
+* PxD6Joint::setAngularDriveConfig() has been added to configure whether angular drives should use the slerp model or twist/swing1/swing2.
+* It is now possible to set different parameters for drives along the swing1 and swing2 axes (see new entries PxD6Drive::eSWING1 and PxD6Drive::eSWING2). Note that it is necessary to configure the D6 joint via PxD6Joint::setAngularDriveConfig(PxD6AngularDriveConfig::eSWING_TWIST) to enable this functionality.
+
+### Fixed
+
+* When running with Direct GPU API enabled (PxSceneFlag::eENABLE_DIRECT_GPU_API), D6 joints were not able to break if the force exceeded the break threshold. The joints do break now but there is a potential performance penalty if the scene has breakable D6 joints.
+
+## Deformable Body
+
+### Fixed
+
+* Deformable Volume collision filter deallocation resulted in memory leaks.
+* Deformable-rigid dynamic friction resolution has received wrong rigid dynamic friction values.
+
+## Rigid Body
+
+### Fixed
+
+* A rare crash in PxConvexCoreGeometry contact generation in Gu::FaceClipper::makePlanes() function has been fixed.
+* A bug when PxPhysics::createMaterial() allowed to create materials with invalid restitution values. The accepted values now are [0, 1] for restitution and (-PX_MAX_REAL, 0) if it's the compliant contact stiffness.
+* Pairs of triangle mesh colliders (where both have no SDF) are filtered out from the collision pipeline, avoiding a crash when e.g. kinematic triangle meshes collide.
+* A regression in the GPU geometry code that could cause ghost contacts between a sphere and a triangle mesh has been fixed.
+
+## Scene Queries
+
+### Added
+
+* `PxConvexCoreGeometry` is now supported as the query geometry in `sweep()` and `overlap()` scene queries.
+
+# v5.6.0-107.0
+
+## Supported Platforms
+
+### Runtime
+
+* Linux (tested on Ubuntu LTS versions 20.04, 22.04, and 24.04 using their respective default GCC and Clang compilers).
+* Microsoft Windows 10 or later (64 bit) 
+* GPU acceleration: display driver supporting CUDA toolkit 12.8 and Volta GPU or above
+
+### Development
+
+* [Linux Platform Readme](documentation/platformreadme/linux/README_LINUX.md)
+* [Windows Platform Readme](documentation/platformreadme/windows/README_WINDOWS.md)
+* Upgrade to CUDA toolkit 12 from CUDA toolkit 11
+
+## General
+
+### Removed
+
+* The deprecated flag Px1DConstraintFlag::eDEPRECATED_DRIVE_ROW has been removed.
+* The deprecated old Direct-GPU API has been removed along with all the types that were used exlusively by that API. This includes the following functions: PxScene::copyBodyData, PxScene::applyActorData, PxScene::copyArticulationData, PxScene::applyArticulationData, PxScene::updateArticulationsKinematic, PxScene::computeDenseJacobians, PxScene::computeGeneralizedMassMatrices, PxScene::computeGeneralizedGravityForces, PxScene::computeCoriolisAndCentrifugalForces, PxScene::copyContactData and PxScene::evaluateSDFDistances. Their replacements are located in PxDirectGPUAPI. PxIndexDataPair, PxActorCacheFlag, PxGpuActorPair, PxGpuBodyData and PxArticulationGpuDataType have been removed.
+* The deprecated flag PxConvexFlag::eGPU_COMPATIBLE has been removed.
+* The deprecated flag PxMaterialFlag::eCOMPLIANT_CONTACT has been removed.
+
+### Deprecated
+
+* Deprecated the PxStridedData and PxTypedStridedData<T>. Use PxBoundedData and PxTypedBoundedData<T> instead. 
+
+### Added
+
+* Added a default implementation of the PxProfilerCallback in PhysXExtensions to record profiling data, called PxDefaultProfiler.
+* Added SnippetProfilerConverter to convert profiler data to a file format that can be viewed in Chrome.
+* The task system now supports high-priority tasks, which are used by the CPU broadphase (PxBroadPhaseType::ePABP). This can sometimes give small performance gains and smoother performance profiles. If not using the default PhysX CPU dispatcher, support for high-priority tasks should be replicated in user-provided CPU dispatchers to take advantage of this change.
+* Added setName/getName functions to PxArticulationJointReducedCoordinate class.
+* The PxGpuBroadPhaseDesc structure has been added, to let users tweak the GPU broadphase data. This is mostly useful when using environment IDs in colocated reinforcement learning cases.
+
+## Rigid Body
+
+### Fixed
+
+* A bug leading to a potential performance issue in the PxBroadPhaseType::ePABP broadphase has been fixed. A pair buffer was constantly resizing each frame for no reason.
+* The GPU broadphase could overflow internal 32bit counters with large colocated environments (reinforcement learning cases). This has been fixed.
+* Switching dynamic/kinematic at runtime when direct GPU API was in use was causing errors and was disabled for that reason in 106.5. The bug was fixed and the feature is enabled again.
+
+### Removed
+
+* The deprecated friction types PxFrictionType::eONE_DIRECTIONAL and ::eTWO_DIRECTIONAL have been removed. Please use PxFrictionType::ePATCH instead (or rather avoid setting the friction type altogether since PxFrictionType::ePATCH is the only supported type left).
+* The deprecated material flag PxMaterialFlag::eIMPROVED_PATCH_FRICTION has been removed and PhysX friction behavior is now always as if this flag had been set.
+* The deprecated kinematic articulation drive modes PxArticulationDriveType::eTARGET and PxArticulationDriveType::eVELOCITY have been removed.
+
+### Deprecated
+
+* The friction type PxFrictionType and the corresponding parameter PxSceneDesc::frictionType have been marked as deprecated. The patch friction model is the only supported type and the option is now obsolete.
+
+## Collision
+
+### Added
+* Collision detection support for PxConvexCoreGeometry-PxDeformableSurface contacts.
+
+## Joints
+
+### Removed
+
+* PxContactJoint and PxJacobianRow were marked as deprecated and have now been removed.
+
+### Added
+
+* PxDirectGPUAPI::getD6JointData() has been added to access the D6 joint forces/torques from GPU memory directly if the direct GPU API is enabled.
+* PxD6Joint::getGPUIndex() has been added to get the indices needed for direct GPU API operations (see bullet point above).
+
+## Articulations
+
+### Added
+
+* A new friction model has been implemented for articulation joints. To utilize this new model please use PxArticulationJointReducedCoordinate::setFrictionParams() to set parameters for joint axes and PxArticulationJointReducedCoordinate::getFrictionParams() to retrieve current parameters.
+* Support of per-axis maxJointVelocity.
+
+### Removed
+
+* The deprecated functions PxArticulationReducedCoordinate::setMaxCOMLinearVelocity(), PxArticulationReducedCoordinate::getMaxCOMLinearVelocity(), PxArticulationReducedCoordinate::setMaxCOMAngularVelocity() and PxArticulationReducedCoordinate::getMaxCOMAngularVelocity() have been removed.
+
+### Fixed
+
+* The maximum joint velocity was not properly enforced when no other internal constraints were present (drive, joint limit, joint friction). This is now fixed.
+
+### Deprecated
+
+* Deprecated PxArticulationJointReducedCoordinate::setFrictionCoefficient() and PxArticulationJointReducedCoordinate::getFrictionCoefficient(). Please use PxArticulationJointReducedCoordinate::setFrictionParams() and PxArticulationJointReducedCoordinate::getFrictionParams() instead. 
+* Deprecated PxArticulationJointReducedCoordinate::setMaxJointVelocity(PxReal maxJointV) and PxArticulationJointReducedCoordinate::getMaxJointVelocity(). Please use PxArticulationJointReducedCoordinate::setMaxJointVelocity(PxArticulationAxis::Enum axis, PxReal maxJointV) and PxArticulationJointReducedCoordinate::getMaxJointVelocity(PxArticulationAxis::Enum axis) instead. 
+
+## Scene queries
+
+### Removed
+
+* The deprecated flag PxHitFlag::eMESH_ANY has been removed. Please use PxHitFlag::eANY_HIT instead.
+
+### Changed
+
+* The specialized PxMeshQuery::findOverlapTriangleMesh function for mesh-vs-mesh overlap has a new API using PxGeomIndexClosePair structures instead of PxGeomIndexPair previously. The previous function has been deprecated. The new function now returns additional distance data when non-zero tolerance values are used.
+
+## Vehicles
+
+### Deprecated
+
+* With the removal of the old deprecated vehicle API (see further below), the following changes will take place in a future version of PhysX:
+  * The folder of the public header files will change from include/vehicle2 to include/vehicle.
+  * The library will be renamed from PhysXVehicle2... to PhysXVehicle...
+  * The namespace vehicle2 will be removed.
+
+### Removed
+
+* The old deprecated vehicle API has been removed. Please use the new vehicle API instead (see the PhysX 4.0 to 5.1 migration guide as well as the vehicle related chapter in the guide). Furthermore, two related PxConstraintExtIDs have been removed (eVEHICLE_SUSP_LIMIT_DEPRECATED and eVEHICLE_STICKY_TYRE_DEPRECATED).
+
+### Changed
+
+* All the vehicle snippets have been renamed from SnippetVehicle2... to SnippetVehicle...
+
+## Deformable Body
+
+### Changed
+
+* Changed PxDeformableBodyFlags from PxU16 to PxU8.
+* Implemented PxActorFlag::eDISABLE_GRAVITY for both PxDeformableSurface and PxDeformableVolume.
+* Deprecated PxDeformableBody::setMaxVelocity, PxDeformableBody::getMaxVelocity
+* Added PxDeformableBody::setMaxLinearVelocity, getMaxLinearVelocity and implemented functionality for PxDeformableVolume
+* Implemented PxDeformableBody::setMaxDepenetrationVelocity, getMaxDepenetrationVelocity (currently limited to deformable-rigid iteractions)
+
+## Serialization
+
+* Binary data conversion and binary meta data have been removed.
+  * PxBinaryConverter
+  * PxConverterReportMode
+  * PxGetPhysicsBinaryMetaData()
+  * PxSerialization::serializeCollectionToBinaryDeterministic()
+  * PxSerialization::dumpBinaryMetaData()
+  * PxSerialization::createBinaryConverter()
+  * PxBinaryMetaDataCallback
+  * PxSerializationRegistry::registerBinaryMetaDataCallback()
+
+# v5.5.1-106.5
+
+## Collision
+
+### Fixed
+
+* A bug when colliding a static rigid body with PxConvexCoreGeometry against PxDeformableVolume led to a crash. 
+* A hanging issue in PxConvexCoreGeometry collision.
+
+## Joints
+
+### Fixed
+
+* When running on GPU, PxConstraint::getForce() might not have returned the correct forces if a scene contained both, joints that did connect to articulation links and joints that did not.
+
+## Pvd
+
+### Changed
+
+* Fixed a potential bug in recording of Direct GPU API set operations followed by a removal of either a rigiddynamic or an articulation.
+
 # v5.5.0-106.4
 
 ## Supported Platforms
@@ -188,7 +418,6 @@
   * The pre-simulation frame state contains all changes on objects before each simulation step starts
   * The post-simulation frame state constains all changes on objects affected by the simulation step
   * The OVD integration major.minor versions due to this change are 1.6
-
 # v5.4.2-106.1
 
 ## Articulations
@@ -327,6 +556,7 @@
 * A force or torque applied to an articulation link after the first simulation step was ignored in the subsequent simulation step; relevant for CPU API and GPU simulation.
 * Some inverse dynamics functions (computeGeneralizedMassMatrix, computeGeneralizedGravityForce, computeDenseJacobian) were not using the most up to date joint positions and velocities when using the Direct GPU API.
 * PxArticulationReducedCoordinate::getLinkAcceleration(linkId) reported an error when linkId was greater than 64.  This limit is no longer a feature of PhysX articulations so the error was false and would have prevented queries of the acceleration of links with id > 64. This has been fixed.
+* The root velocity of an articulation was not reliably propagated to GPU after an update using PxArticulationReducedCoordinate::applyCache() with the autowake argument set true and when the wake counter (see PxArticulationReducedCoordinate::setWakeCounter()) of the articulation was greater than PxPxSceneDesc::wakeCounterResetValue. This has been fixed.
 
 ### Deprecated
 

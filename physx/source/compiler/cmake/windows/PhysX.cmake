@@ -22,7 +22,7 @@
 ## (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ## OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ##
-## Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+## Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 
 #
 # Build PhysX (PROJECT not SOLUTION)
@@ -30,6 +30,12 @@
 
 SET(PHYSX_PLATFORM_INCLUDES
 )
+
+IF(NOT PUBLIC_RELEASE)
+	LIST(APPEND PHYSX_PLATFORM_INCLUDES
+		${PHYSX_SOURCE_DIR}/physx/src/internal/device
+	)
+ENDIF()
 
 SET(PHYSX_GPU_HEADERS
 	${PHYSX_ROOT_DIR}/include/gpu/PxGpu.h
@@ -55,12 +61,17 @@ SET(PHYSX_RESOURCE
 )
 SOURCE_GROUP(resource FILES ${PHYSX_RESOURCE})
 
-SET(PHYSX_DEVICE_SOURCE
-	${PX_SOURCE_DIR}/device/nvPhysXtoDrv.h
-	${PX_SOURCE_DIR}/device/PhysXIndicator.h
-	${PX_SOURCE_DIR}/device/windows/PhysXIndicatorWindows.cpp
-)
-SOURCE_GROUP(src\\device FILES ${PHYSX_DEVICE_SOURCE})
+IF(NOT PUBLIC_RELEASE)
+	SET(PHYSX_DEVICE_SOURCE
+		${PX_SOURCE_DIR}/internal/device/nvPhysXtoDrv.h
+		${PX_SOURCE_DIR}/internal/device/PhysXIndicator.h
+		${PX_SOURCE_DIR}/internal/device/windows/PhysXIndicatorWindows.cpp
+	)
+	SOURCE_GROUP(src\\device FILES ${PHYSX_DEVICE_SOURCE})
+ELSE()
+	SET(PHYSX_DEVICE_SOURCE
+	)
+ENDIF()
 
 SET(PHYSX_GPU_SOURCE
 	${PX_SOURCE_DIR}/gpu/PxGpu.cpp

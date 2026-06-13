@@ -22,7 +22,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,6 +36,7 @@
 #include "SnXmlWriter.h"
 #include "SnXmlImpl.h"
 #include "foundation/PxStrideIterator.h"
+#include "PxExtensionMetaDataObjects.h"
 
 namespace physx { namespace Sn {
 
@@ -488,6 +489,26 @@ namespace physx { namespace Sn {
 			typedef typename TAccessorType::prop_type TPropertyType;
 			TPropertyType propVal = inProp.get( mObj );
 			handleComplexObj( *this, &propVal, inInfo );
+		}
+
+		//
+		// The D6 joint has been changed such that it is necessary to specify what kind of angular drive model to apply.
+		// Depending on that choice, it is not legal anymore to set/get drive parameters for certain angular drive types.
+		// The serialization system, however, just blindly tries to get all drive parameters.
+		//
+		// Note: using partial template specialization because the compiler for aarch64 did not yet support in-class
+		//       explicit specialization
+		//
+		typedef Vd::PxPvdIndexedPropertyAccessor<PxExtensionsPropertyInfoName::PxD6Joint_Drive, PxD6Joint, PxD6Drive::Enum, PxD6JointDrive> PxD6JointDriveAccessor;
+		template<typename TInfoType>
+		void complexProperty( PxU32* /*key*/, const PxD6JointDriveAccessor& inProp, TInfoType& inInfo )
+		{
+			if (isD6JointDriveAccessAllowed(inProp.mIndex, mObj->getAngularDriveConfig()))
+			{
+				typedef typename PxD6JointDriveAccessor::prop_type TPropertyType;
+				TPropertyType propVal = inProp.get( mObj );
+				handleComplexObj( *this, &propVal, inInfo );
+			}
 		}
 		
 		template<typename TAccessorType, typename TInfoType>

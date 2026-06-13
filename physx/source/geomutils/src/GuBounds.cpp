@@ -22,7 +22,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -582,6 +582,15 @@ ShapeData::ShapeData(const PxGeometry& g, const PxTransform& t, PxReal inflation
 
 			mGuBox.extents	= shape.halfExtents;	// PT: TODO: use SIMD
 			mPrunerBoxGeomExtents = shape.halfExtents*SQ_PRUNER_INFLATION;
+		}
+		break;
+
+		case PxGeometryType::eCONVEXCORE:
+		{
+			PxBounds3 bounds; Gu::computeBounds(bounds, g, t, inflation, SQ_PRUNER_INFLATION);
+			mPrunerInflatedAABB.minimum = bounds.minimum;
+			mPrunerInflatedAABB.maximum = bounds.maximum;
+			mGuBox.extents = mPrunerBoxGeomExtents = bounds.getExtents();
 		}
 		break;
 

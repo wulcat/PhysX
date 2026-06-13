@@ -22,7 +22,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 
 #ifndef DY_DEFORMABLE_VOLUME_H
 #define DY_DEFORMABLE_VOLUME_H
@@ -75,9 +75,15 @@ public:
 					dirtySoftBodies[i] = NULL;
 				}
 			}
+		}
 
-			if (mVolumeVolumeFilterPairs)
-				PX_FREE(mVolumeVolumeFilterPairs);
+		if(mVolumeVolumeFilterPairs)
+		{
+			// TODO: Move all Pxg level data into Pxg layer!
+			mVolumeVolumeFilterPairs->clear();
+			mVolumeVolumeFilterPairs->shrink();
+			PX_FREE(mVolumeVolumeFilterPairs);
+			mVolumeVolumeFilterPairs = NULL;
 		}
 	}
 

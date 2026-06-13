@@ -22,7 +22,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Copyright (c) 2008-2024 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2025 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -126,11 +126,11 @@ void PxSetJointGlobalFrame(PxJoint& joint, const PxVec3* wsAnchor, const PxVec3*
 
 #if PX_SUPPORT_OMNI_PVD
 
-void physx::Ext::omniPvdSetBaseJointParams(PxJoint& joint, PxJointConcreteType::Enum cType)
+void physx::Ext::omniPvdSetBaseJointParams(const PxJoint& joint, PxJointConcreteType::Enum cType)
 {
 	OMNI_PVD_WRITE_SCOPE_BEGIN(pvdWriter, pvdRegData)
 
-	PxJoint& j = static_cast<PxJoint&>(joint);
+	const PxJoint& j = static_cast<const PxJoint&>(joint);
 	PxRigidActor* actors[2]; j.getActors(actors[0], actors[1]);
 	OMNI_PVD_SET_EXPLICIT(pvdWriter, pvdRegData, OMNI_PVD_CONTEXT_HANDLE, PxJoint, actor0, j, actors[0])
 	OMNI_PVD_SET_EXPLICIT(pvdWriter, pvdRegData, OMNI_PVD_CONTEXT_HANDLE, PxJoint, actor1, j, actors[1])
