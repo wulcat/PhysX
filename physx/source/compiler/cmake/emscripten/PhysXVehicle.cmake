@@ -28,6 +28,8 @@
 # Build PhysXVehicle
 #
 
+message("--ME-- PhysXVehicle.cmake")
+
 # Use generator expressions to set config specific preprocessor definitions
 SET(PHYSXVEHICLE_COMPILE_DEFS
 
